@@ -103,17 +103,16 @@ func moveDeployment(ctx context.Context, clientset *kubernetes.Clientset, deploy
 
 	log.Printf("Moving Deployment %q from %q to %q\n", deploymentName, sourceNamespace, targetNamespace)
 
-	// Update the deployment's namespace
-	deployment.Namespace = targetNamespace
-	_, err := clientset.AppsV1().Deployments(sourceNamespace).Update(ctx, deployment, v1.UpdateOptions{})
+	// Get the current deployment in the source namespace
+	sourceDeployment, err := clientset.AppsV1().Deployments(sourceNamespace).Get(ctx, deploymentName, v1.GetOptions{})
 	if err != nil {
-		return fmt.Errorf("Failed to update Deployment %q namespace: %v", deploymentName, err)
+		return fmt.Errorf("Failed to retrieve Deployment %q in namespace %q: %v", deploymentName, sourceNamespace, err)
 	}
 
-	// Create a new deployment in the target namespace
-	deployment.ResourceVersion = ""
-	deployment.UID = ""
-	_, err = clientset.AppsV1().Deployments(targetNamespace).Create(ctx, deployment, v1.CreateOptions{})
+	// Update the deployment's namespace
+	sourceDeployment.Namespace = targetNamespace
+	sourceDeployment.ResourceVersion = "" // Clear the ResourceVersion field
+	_, err = clientset.AppsV1().Deployments(targetNamespace).Create(ctx, sourceDeployment, v1.CreateOptions{})
 	if err != nil {
 		return fmt.Errorf("Failed to create Deployment %q in namespace %q: %v", deploymentName, targetNamespace, err)
 	}
@@ -139,22 +138,15 @@ func moveService(ctx context.Context, clientset *kubernetes.Clientset, deploymen
 
 	log.Printf("Moving Service %q from %q to %q\n", serviceName, sourceNamespace, targetNamespace)
 
-	// Update the service's namespace
-	service, err := clientset.CoreV1().Services(sourceNamespace).Get(ctx, serviceName, v1.GetOptions{})
+	// Get the current service in the source namespace
+	sourceService, err := clientset.CoreV1().Services(sourceNamespace).Get(ctx, serviceName, v1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("Failed to retrieve Service %q in namespace %q: %v", serviceName, sourceNamespace, err)
 	}
 
-	service.Namespace = targetNamespace
-	_, err = clientset.CoreV1().Services(sourceNamespace).Update(ctx, service, v1.UpdateOptions{})
-	if err != nil {
-		return fmt.Errorf("Failed to update Service %q namespace: %v", serviceName, err)
-	}
-
-	// Create a new service in the target namespace
-	service.ResourceVersion = ""
-	service.UID = ""
-	_, err = clientset.CoreV1().Services(targetNamespace).Create(ctx, service, v1.CreateOptions{})
+	// Update the service's namespace
+	sourceService.Namespace = targetNamespace
+	_, err = clientset.CoreV1().Services(targetNamespace).Create(ctx, sourceService, v1.CreateOptions{})
 	if err != nil {
 		return fmt.Errorf("Failed to create Service %q in namespace %q: %v", serviceName, targetNamespace, err)
 	}
