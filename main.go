@@ -13,7 +13,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	_ "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -21,11 +20,15 @@ import (
 var (
 	kubeconfigPath   string
 	reconcileTimeout time.Duration
+	label            string
+	targetNamespace  string
 )
 
 func init() {
 	flag.StringVar(&kubeconfigPath, "kubeconfig", "", "Path to the kubeconfig file")
 	flag.DurationVar(&reconcileTimeout, "reconcile-timeout", 5*time.Minute, "Reconciliation timeout duration")
+	flag.StringVar(&label, "label-selector", "app=example-app", "Label selector for the Deployment")
+	flag.StringVar(&targetNamespace, "target-namespace", "test2", "Target namespace for moving the Deployment")
 }
 
 func main() {
@@ -76,9 +79,7 @@ func main() {
 
 func reconcileDeployment(ctx context.Context, clientset *kubernetes.Clientset) error {
 	deploymentsClient := clientset.AppsV1().Deployments(v1.NamespaceAll)
-	selector := labels.Set{"app": "example-app"}.AsSelector()
-
-	deploymentList, err := deploymentsClient.List(ctx, v1.ListOptions{LabelSelector: selector.String()})
+	deploymentList, err := deploymentsClient.List(ctx, v1.ListOptions{LabelSelector: label})
 	if err != nil {
 		return fmt.Errorf("Failed to retrieve Deployments: %v", err)
 	}
@@ -86,10 +87,10 @@ func reconcileDeployment(ctx context.Context, clientset *kubernetes.Clientset) e
 	for _, deployment := range deploymentList.Items {
 		annotations := deployment.GetAnnotations()
 
-		if annotations["ns"] == "test" {
-			err = moveDeployment(ctx, clientset, &deployment, "test2")
+		if annotations["move-namespace"] == "true" {
+			err = moveDeployment(ctx, clientset, &deployment, targetNamespace)
 			if err != nil {
-				log.Printf("Failed to move Deployment %q to test2: %v\n", deployment.Name, err)
+				log.Printf("Failed to move Deployment %q to %q: %v\n", deployment.Name, targetNamespace, err)
 			}
 		}
 	}
